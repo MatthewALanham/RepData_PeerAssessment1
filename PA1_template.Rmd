@@ -1,25 +1,165 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+# Reproducible Research: Peer Assessment 1
+## author: Matthew A. Lanham
 
 
+The dataset description:
+- The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+1. steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+2. date: The date on which the measurement was taken in YYYY-MM-DD format
+3. interval: Identifier for the 5-minute interval in which measurement was taken
+
+```{r, echo=TRUE}
 ## Loading and preprocessing the data
-
-
+data = read.csv("activity\\activity.csv")
+head(data)
+```
 
 ## What is mean total number of steps taken per day?
+```{r, echo=TRUE, fig.width=10, fig.height=5}
+## Create a new data set calculating the total, mean, and median steps per day
+my_dates = as.data.frame(table(data$date))[,1]
+data2 = data
+data2$date = as.ordered(data2$date)
+listOfSums = by(data2[,c("steps","interval")], data2$date, colSums)
+listOfMeans = by(data2[,c("steps","interval")], data2$date, colMeans)
+require(miscTools) #needed for colMedians() function
+listOfMedians = by(data2[,c("steps","interval")], data2$date, colMedians)
+summaryByDay = as.data.frame(matrix(nrow=length(my_dates), ncol=4))
+colnames(summaryByDay) = c("date","total","mean","median")
+for (i in 1:length(my_dates)) {
+    summaryByDay[i,1] = as.character(my_dates[i])          #date
+    summaryByDay[i,2] = listOfSums[[my_dates[i]]][[1]]     #total
+    summaryByDay[i,3] = listOfMeans[[my_dates[i]]][[1]]    #mean
+    summaryByDay[i,4] = listOfMedians[[my_dates[i]]][[1]]  #median
+}
 
+## Create a Histogram
+hist(summaryByDay[,2], col="lightblue"
+     , main="Histogram of total number of steps per day"
+     , xlab="Total steps"
+     , ylab="Frequency")
 
+## Report of mean and median total number of steps by day (ignore missing values)
+summaryByDay[complete.cases(summaryByDay),c("date","mean","median")]
+```
 
 ## What is the average daily activity pattern?
+```{r, echo=TRUE, fig.width=10, fig.height=5}
+## Create a dataset showing the mean per interval for the time-series plot
+my_intervals = as.data.frame(table(data$interval))[,1]
+data3 = data
+data3$interval = as.ordered(data3$interval)
+data3$date = as.numeric(data3$date)
+listOfIntervalMeans = by(data3[,c("steps","date")], data3$interval, colMeans, na.rm=TRUE)
+summaryByInterval = as.data.frame(matrix(nrow=length(my_intervals), ncol=2))
+colnames(summaryByInterval) = c("interval","mean")
+for (i in 1:length(my_intervals)) {
+    summaryByInterval[i,1] = as.character(my_intervals[i])                #interval
+    summaryByInterval[i,2] = listOfIntervalMeans[[my_intervals[i]]][[1]]  #mean
+}
+summaryByInterval
 
+## time-series plot of mean steps per 5-minute interval
+plot(summaryByInterval$interval, summaryByInterval$mean, type="l"
+     , main="Average number of steps per interval"
+     , xlab="5-minute time interval"
+     , ylab="Mean number of steps"
+     , col="blue", lwd=2
+     )
 
-
+## interval containing max number of steps
+summaryByInterval[which.max(summaryByInterval$mean),]
+```
 ## Imputing missing values
+```{r, echo=TRUE, fig.width=10, fig.height=5}
+data4 = data
+## report total number of missing values in the dataset
+dim(data4[!complete.cases(data4),])[1]
 
+## Here I imputed the missing values using mean for each time interval
+for (i in 1:dim(summaryByInterval)[1]) {
+    #identify missing locations within each interval
+    missingSet = !complete.cases(data4[which(data4$interval==summaryByInterval[i,1]),])
+    #set those missing values within each interval to its corresponding mean
+    data4[which(data4$interval==summaryByInterval[i,1]),][missingSet,"steps"] = summaryByInterval[i,2]
+}
 
+## Create a new data with the new imputed values
+data4$date = as.ordered(data4$date)
+listOfSumsImp = by(data4[,c("steps","interval")], data4$date, colSums)
+listOfMeansImp = by(data4[,c("steps","interval")], data4$date, colMeans)
+require(miscTools) #needed for colMedians() function
+listOfMediansImp = by(data4[,c("steps","interval")], data4$date, colMedians)
+summaryByDayImp = as.data.frame(matrix(nrow=length(my_dates), ncol=4))
+colnames(summaryByDayImp) = c("date","total","mean","median")
+for (i in 1:length(my_dates)) {
+    summaryByDayImp[i,1] = as.character(my_dates[i])             #date
+    summaryByDayImp[i,2] = listOfSumsImp[[my_dates[i]]][[1]]     #total
+    summaryByDayImp[i,3] = listOfMeansImp[[my_dates[i]]][[1]]    #mean
+    summaryByDayImp[i,4] = listOfMediansImp[[my_dates[i]]][[1]]  #median
+}
+
+## Create a Histogram of the steps per day AFTER imputation
+hist(summaryByDayImp[,2], col="lightblue"
+     , main="Histogram of total number of steps per day"
+     , xlab="Total steps"
+     , ylab="Frequency")
+
+## Report of mean and median total number of steps by day (with imputed values)
+summaryByDayImp[complete.cases(summaryByDayImp),c("date","mean","median")]
+
+## Side-by-side comparision by day after imputation
+results = merge(x=summaryByDay, y=summaryByDayImp, by="date")
+results$date = as.Date(results$date)
+names(results) = c("date","total","mean","median","totalImp","meanImp","medianImp")
+results
+
+## The difference in total step after imputation for days that didn't have missing values initially
+resultsClean = results[complete.cases(results),]
+summary(resultsClean$totalImp - resultsClean$total)
+
+## Addttional steps over 60-day window because of imputation
+sum(results$totalImp) - sum(results$total, na.rm=TRUE)
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r, echo=TRUE, fig.width=10, fig.height=10}
+## Create a new variable called "dayInd" showing if the measurement was taken during the weekend or weekday
+data4$date = as.Date(data4$date)
+require(timeDate)
+data4$dayInd = as.factor(ifelse(isWeekday(data4$date),"weekday","weekend"))
+my_intervals = as.data.frame(table(data$interval))[,1]
+data4$interval = as.ordered(data4$interval)
+data4$date = as.numeric(data4$date)
+weekend = data4[which(data4$dayInd=="weekend"),]
+weekday = data4[which(data4$dayInd=="weekday"),]
+
+## Generate the stats that will be used for the time-series plot below
+listOfWeekendMeans = by(weekend[,c("steps","date")], weekend$interval, colMeans, na.rm=TRUE)
+listOfWeekdayMeans = by(weekday[,c("steps","date")], weekday$interval, colMeans, na.rm=TRUE)
+weekendSummary = as.data.frame(matrix(nrow=length(my_intervals), ncol=2))
+weekdaySummary = as.data.frame(matrix(nrow=length(my_intervals), ncol=2))
+colnames(weekendSummary) = c("interval","mean")
+colnames(weekdaySummary) = c("interval","mean")
+for (i in 1:length(my_intervals)) {
+    weekendSummary[i,1] = as.character(my_intervals[i])                #interval
+    weekendSummary[i,2] = listOfWeekendMeans[[my_intervals[i]]][[1]]   #mean
+    weekdaySummary[i,1] = as.character(my_intervals[i])                #interval
+    weekdaySummary[i,2] = listOfWeekdayMeans[[my_intervals[i]]][[1]]   #mean
+}
+
+## time-series plot of mean steps per 5-minute interval
+par(mfrow=c(2,1))
+plot(weekdaySummary$interval, weekdaySummary$mean, type="l"
+     , main="Average number of steps per interval (Weekday)"
+     , xlab="5-minute time interval"
+     , ylab="Mean number of steps"
+     , col="blue", lwd=2
+     )
+plot(weekendSummary$interval, weekendSummary$mean, type="l"
+     , main="Average number of steps per interval (Weekend)"
+     , xlab="5-minute time interval"
+     , ylab="Mean number of steps"
+     , col="blue", lwd=2
+     )
+```
